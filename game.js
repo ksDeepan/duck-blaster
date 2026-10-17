@@ -1,116 +1,139 @@
 
+"use strict";
+
+// ==========================================
+// DUCK BLASTER - Flying Duck Shooting Game
+// ==========================================
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-const $ = id => document.getElementById(id);
+const $ = (id) => document.getElementById(id);
 
-const scoreEl = $("score");
-const bestEl = $("best");
-const levelEl = $("level");
-const timeEl = $("time");
-const livesEl = $("lives");
-const ammoEl = $("ammo");
-const levelNameEl = $("levelName");
-const progressEl = $("levelProgress");
-const overlay = $("overlay");
-const overlayTitle = $("overlayTitle");
-const overlayText = $("overlayText");
-const startBtn = $("startBtn");
-const pauseBtn = $("pauseBtn");
-const reloadBtn = $("reloadBtn");
-const soundBtn = $("soundBtn");
+const ui = {
+  score: $("score"),
+  best: $("best"),
+  level: $("level"),
+  time: $("time"),
+  lives: $("lives"),
+  ammo: $("ammo"),
+  levelProgress: $("levelProgress"),
+  levelName: $("levelName"),
+  overlay: $("overlay"),
+  overlayTitle: $("overlayTitle"),
+  overlayText: $("overlayText"),
+  startBtn: $("startBtn"),
+  pauseBtn: $("pauseBtn"),
+  reloadBtn: $("reloadBtn"),
+  soundBtn: $("soundBtn")
+};
 
-const GAME_DURATION = 60;
 const MAX_LEVEL = 10;
-const MAX_AMMO = 6;
-const MAX_LIVES = 5;
-
-const levelNames = [
-  "FIRST FLIGHT", "SKY PATROL", "QUICK WINGS",
-  "FEATHER FRENZY", "AIRBORNE ACTION", "WILD SKY",
-  "ACE SHOOTER", "STORM FLIGHT", "MASTER HUNTER",
-  "LEGENDARY SHOT"
-];
+const GAME_TIME = 60;
+const MAGAZINE_SIZE = 6;
+const STARTING_LIVES = 5;
+const LEVEL_SCORE = 100;
 
 let width = 800;
 let height = 450;
-let pixelRatio = 1;
 
 let score = 0;
-let best = Number(localStorage.getItem("duckBlasterBest") || 0);
+let best = loadBest();
 let level = 1;
-let lives = MAX_LIVES;
-let ammo = MAX_AMMO;
-let timeLeft = GAME_DURATION;
-
-let ducks = [];
-let particles = [];
-let floatingTexts = [];
-let clouds = [];
-let grass = [];
+let lives = STARTING_LIVES;
+let ammo = MAGAZINE_SIZE;
+let timeLeft = GAME_TIME;
 
 let running = false;
 let paused = false;
+let gameOver = false;
 let reloading = false;
 let soundEnabled = true;
 
+let ducks = [];
+let particles = [];
+
 let spawnTimer = 0;
+let reloadTimer = 0;
+let elapsed = 0;
 let lastFrame = 0;
 let animationId = null;
-let reloadTimeout = null;
 let audioContext = null;
 
-let pointer = { x: -100, y: -100 };
-let shake = 0;
-let shotFlash = 0;
+const levelNames = [
+  "FIRST FLIGHT",
+  "SKY PATROL",
+  "QUICK WINGS",
+  "FEATHER FRENZY",
+  "GOLDEN HUNT",
+  "WILD SKY",
+  "ACE SHOOTER",
+  "STORM FLIGHT",
+  "MASTER HUNTER",
+  "DUCK LEGEND"
+];
 
-// ---------- CANVAS ----------
+// ==========================================
+// SAVE HIGH SCORE
+// ==========================================
+
+function loadBest() {
+  try {
+    return Number(localStorage.getItem("duckBlasterBest")) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveBest() {
+  try {
+    localStorage.setItem("duckBlasterBest", String(best));
+  } catch {
+    // Game can still run if storage is unavailable.
+  }
+}
+
+// ==========================================
+// CANVAS SIZE
+// ==========================================
 
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
 
-  width = rect.width || 800;
-  height = rect.height || 450;
-  pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  if (!rect.width || !rect.height) return;
 
-  canvas.width = Math.round(width * pixelRatio);
-  canvas.height = Math.round(height * pixelRatio);
+  width = rect.width;
+  height = rect.height;
 
-  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  // Keep drawing coordinates in CSS pixels.
+  // This also makes mouse and touch aiming accurate.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-  createScenery();
-  drawScene(0);
-}
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
 
-function createScenery() {
-  clouds = Array.from({ length: 7 }, (_, i) => ({
-    x: i * width / 7 + Math.random() * 30,
-    y: 35 + Math.random() * height * 0.32,
-    size: 0.55 + Math.random() * 0.8,
-    speed: 5 + Math.random() * 12
-  }));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  grass = Array.from(
-    { length: Math.ceil(width / 12) + 2 },
-    (_, i) => ({
-      x: i * 12,
-      h: 8 + Math.random() * 25
-    })
-  );
+  if (!running) drawScene();
 }
 
 window.addEventListener("resize", resizeCanvas);
 
-// ---------- SOUND ----------
+// ==========================================
+// SOUND EFFECTS
+// ==========================================
 
-function playSound(frequency, duration = 0.08, type = "sine", volume = 0.035) {
+function playSound(frequency = 400, duration = 0.08, type = "sine") {
   if (!soundEnabled) return;
 
   try {
+    const AudioContextClass =
+      window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextClass) return;
+
     if (!audioContext) {
-      audioContext = new (
-        window.AudioContext || window.webkitAudioContext
-      )();
+      audioContext = new AudioContextClass();
     }
 
     if (audioContext.state === "suspended") {
@@ -121,12 +144,9 @@ function playSound(frequency, duration = 0.08, type = "sine", volume = 0.035) {
     const gain = audioContext.createGain();
 
     oscillator.type = type;
-    oscillator.frequency.setValueAtTime(
-      frequency,
-      audioContext.currentTime
-    );
+    oscillator.frequency.value = frequency;
 
-    gain.gain.setValueAtTime(volume, audioContext.currentTime);
+    gain.gain.setValueAtTime(0.12, audioContext.currentTime);
     gain.gain.exponentialRampToValueAtTime(
       0.001,
       audioContext.currentTime + duration
@@ -137,128 +157,73 @@ function playSound(frequency, duration = 0.08, type = "sine", volume = 0.035) {
 
     oscillator.start();
     oscillator.stop(audioContext.currentTime + duration);
-  } catch (error) {
-    // Sound is optional; gameplay continues without it.
+  } catch {
+    // Sound is optional.
   }
 }
 
-soundBtn.addEventListener("click", () => {
-  soundEnabled = !soundEnabled;
-  soundBtn.textContent = soundEnabled ? "🔊 Sound" : "🔇 Sound";
+// ==========================================
+// DUCK CREATION
+// ==========================================
 
-  if (soundEnabled) playSound(600);
-});
-
-// ---------- LEVELS ----------
-
-function getLevelFromScore(points) {
-  return Math.min(MAX_LEVEL, 1 + Math.floor(points / 100));
-}
-
-function getDuckLimit() {
-  return Math.min(6, 1 + Math.floor((level - 1) / 2));
-}
-
-function getSpawnInterval() {
-  return Math.max(330, 1250 - (level - 1) * 95);
-}
-
-function updateLevel() {
-  const newLevel = getLevelFromScore(score);
-
-  if (newLevel !== level) {
-    level = newLevel;
-
-    addFloatingText(
-      width / 2,
-      height * 0.32,
-      `LEVEL ${level}!`,
-      "#fff16b",
-      true
-    );
-
-    playSound(600 + level * 80, 0.22, "triangle", 0.06);
-  }
-
-  levelEl.textContent = `${level} / ${MAX_LEVEL}`;
-  levelNameEl.textContent =
-    `LEVEL ${level} — ${levelNames[level - 1]}`;
-
-  const progress = level === MAX_LEVEL ? 100 : score % 100;
-  progressEl.style.width = `${progress}%`;
-}
-
-// ---------- DUCK SPAWNING ----------
-
-function spawnDuck() {
+function createDuck() {
+  const golden = Math.random() < 0.12;
   const direction = Math.random() < 0.5 ? 1 : -1;
-  const scale = 0.8 + Math.random() * 0.35;
+
+  const baseSize = 0.8 + Math.random() * 0.45;
+  const speed = 100 + level * 18 + Math.random() * 65;
 
   ducks.push({
-    x: direction === 1 ? -55 : width + 55,
-    y: 65 + Math.random() * Math.max(70, height * 0.48),
-    direction,
-    scale,
-    speed: (65 + Math.random() * 45) * (1 + (level - 1) * 0.15),
-    verticalSpeed: 18 + Math.random() * 30 + level * 1.5,
-    phase: Math.random() * Math.PI * 2,
-    flap: Math.random() * Math.PI * 2,
-    isGolden: Math.random() < 0.08,
-    alive: true
+    x: direction === 1 ? -45 : width + 45,
+    y: 55 + Math.random() * Math.max(50, height * 0.58),
+    vx: speed * direction,
+    vy: (Math.random() - 0.5) * 45,
+    scale: baseSize,
+    golden,
+    alive: true,
+    escaped: false,
+    wing: Math.random() * Math.PI * 2,
+    wobble: Math.random() * Math.PI * 2
   });
 }
 
-// ---------- BACKGROUND ----------
+// ==========================================
+// DRAW THE BACKGROUND
+// ==========================================
 
-function drawBackground(dt) {
+function drawBackground() {
   const sky = ctx.createLinearGradient(0, 0, 0, height);
-  sky.addColorStop(0, "#55bde8");
-  sky.addColorStop(0.58, "#b9f0fa");
-  sky.addColorStop(1, "#f5e9b6");
+
+  sky.addColorStop(0, "#58bde8");
+  sky.addColorStop(0.65, "#b8eff4");
+  sky.addColorStop(1, "#e3f7d2");
 
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, width, height);
 
   // Sun
-  ctx.fillStyle = "#fff2a8";
   ctx.beginPath();
-  ctx.arc(width * 0.82, height * 0.18, 32, 0, Math.PI * 2);
+  ctx.arc(width * 0.82, height * 0.19, 28, 0, Math.PI * 2);
+  ctx.fillStyle = "#fff0a0";
   ctx.fill();
 
-  // Moving clouds
-  for (const cloud of clouds) {
-    cloud.x += cloud.speed * dt;
+  // Clouds
+  drawCloud(width * 0.19, height * 0.2, 1);
+  drawCloud(width * 0.39, height * 0.14, 0.8);
+  drawCloud(width * 0.92, height * 0.2, 1.05);
 
-    if (cloud.x > width + 100) cloud.x = -100;
-
-    ctx.save();
-    ctx.translate(cloud.x, cloud.y);
-    ctx.scale(cloud.size, cloud.size);
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
-
-    ctx.beginPath();
-    ctx.arc(-22, 0, 18, 0, Math.PI * 2);
-    ctx.arc(0, -10, 24, 0, Math.PI * 2);
-    ctx.arc(24, 0, 18, 0, Math.PI * 2);
-    ctx.arc(3, 7, 25, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // Hills
-  const groundY = height * 0.82;
-
-  ctx.fillStyle = "#91ce9d";
+  // Distant hills
+  ctx.fillStyle = "#91cc9b";
   ctx.beginPath();
-  ctx.moveTo(0, height * 0.67);
+  ctx.moveTo(0, height * 0.72);
 
-  for (let x = 0; x <= width + 20; x += 20) {
-    ctx.lineTo(
-      x,
-      height * 0.64 +
-        Math.sin(x * 0.012) * 20 +
-        Math.sin(x * 0.027) * 8
-    );
+  for (let x = 0; x <= width + 10; x += 10) {
+    const y =
+      height * 0.72 -
+      Math.sin(x / 100) * height * 0.035 -
+      Math.sin(x / 43) * height * 0.012;
+
+    ctx.lineTo(x, y);
   }
 
   ctx.lineTo(width, height);
@@ -267,402 +232,302 @@ function drawBackground(dt) {
   ctx.fill();
 
   // Ground
-  ctx.fillStyle = "#5fbd63";
-  ctx.fillRect(0, groundY, width, height - groundY);
+  ctx.fillStyle = "#5bbd61";
+  ctx.fillRect(0, height * 0.88, width, height * 0.12);
 
-  ctx.fillStyle = "#348e4a";
-  ctx.fillRect(0, groundY, width, 7);
-
-  // Grass blades
-  ctx.strokeStyle = "#348e4a";
-  ctx.lineWidth = 2;
-
-  for (const blade of grass) {
-    ctx.beginPath();
-    ctx.moveTo(blade.x, height);
-    ctx.lineTo(blade.x - 3, height - blade.h);
-    ctx.stroke();
-  }
+  ctx.fillStyle = "#34894e";
+  ctx.fillRect(0, height * 0.87, width, 5);
 
   // Trees
-  for (let i = 0; i < 8; i++) {
-    const tx = i * (width / 7);
-    const ty = groundY + 5;
+  const treeSpacing = Math.max(85, width / 7);
 
-    ctx.fillStyle = "#7a4c2c";
-    ctx.fillRect(tx - 4, ty - 35, 8, 40);
+  for (let x = 10; x < width + treeSpacing; x += treeSpacing) {
+    const treeY = height * 0.87;
 
-    ctx.fillStyle = i % 2 ? "#318453" : "#267849";
+    ctx.fillStyle = "#80512c";
+    ctx.fillRect(x - 4, treeY - 25, 9, 29);
+
+    ctx.fillStyle = "#267a4d";
+
     ctx.beginPath();
-    ctx.arc(tx, ty - 43, 22, 0, Math.PI * 2);
-    ctx.arc(tx - 13, ty - 31, 16, 0, Math.PI * 2);
-    ctx.arc(tx + 13, ty - 31, 16, 0, Math.PI * 2);
+    ctx.arc(x, treeY - 34, 18, 0, Math.PI * 2);
+    ctx.arc(x - 10, treeY - 26, 14, 0, Math.PI * 2);
+    ctx.arc(x + 11, treeY - 25, 13, 0, Math.PI * 2);
     ctx.fill();
   }
 }
 
-// ---------- DUCK DRAWING ----------
-
-function drawDuck(duck) {
-  const wingFlap = Math.sin(duck.flap) * 0.6;
-  const s = duck.scale;
-  const bodyColor = duck.isGolden ? "#ffbd22" : "#f5d64b";
-  const wingColor = duck.isGolden ? "#fff078" : "#fff09a";
-  const outline = "#654521";
-
+function drawCloud(x, y, scale) {
   ctx.save();
-  ctx.translate(duck.x, duck.y);
-  ctx.scale(duck.direction * s, s);
-
-  // Tail
-  ctx.fillStyle = bodyColor;
-  ctx.strokeStyle = outline;
-  ctx.lineWidth = 2.2;
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = "rgba(255,255,255,0.78)";
 
   ctx.beginPath();
-  ctx.moveTo(-21, 0);
-  ctx.lineTo(-36, -12);
-  ctx.lineTo(-32, 2);
-  ctx.lineTo(-39, 10);
-  ctx.lineTo(-18, 9);
-  ctx.closePath();
+  ctx.arc(-18, 4, 19, 0, Math.PI * 2);
+  ctx.arc(0, -6, 25, 0, Math.PI * 2);
+  ctx.arc(20, 5, 20, 0, Math.PI * 2);
+  ctx.arc(2, 13, 21, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ==========================================
+// DRAW DUCKS
+// ==========================================
+
+function drawDuck(duck) {
+  ctx.save();
+  ctx.translate(duck.x, duck.y);
+  ctx.scale(duck.scale, duck.scale);
+
+  // Face the direction of travel
+  if (duck.vx < 0) {
+    ctx.scale(-1, 1);
+  }
+
+  const bodyColor = duck.golden ? "#ffd84e" : "#f6e1a1";
+  const outline = duck.golden ? "#9b6817" : "#7c6939";
+
+  // Wing animation
+  const wingLift = Math.sin(duck.wing) * 5;
+
+  // Body
+  ctx.fillStyle = bodyColor;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 2.5;
+
+  ctx.beginPath();
+  ctx.ellipse(0, 4, 25, 17, -0.1, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  // Body
+  // Wing
+  ctx.fillStyle = duck.golden ? "#fff0a0" : "#fff0cb";
+
   ctx.beginPath();
-  ctx.ellipse(-2, 5, 25, 16, -0.1, 0, Math.PI * 2);
-  ctx.fillStyle = bodyColor;
+  ctx.ellipse(-1, wingLift, 14, 9, -0.4, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 1.5;
+
+  ctx.beginPath();
+  ctx.moveTo(-8, wingLift - 4);
+  ctx.lineTo(3, wingLift + 5);
+  ctx.moveTo(-1, wingLift - 5);
+  ctx.lineTo(8, wingLift + 3);
   ctx.stroke();
 
   // Neck
-  ctx.beginPath();
-  ctx.moveTo(8, 7);
-  ctx.quadraticCurveTo(10, -5, 13, -17);
-  ctx.lineTo(23, -17);
-  ctx.quadraticCurveTo(17, -3, 20, 7);
-  ctx.closePath();
   ctx.fillStyle = bodyColor;
-  ctx.fill();
-  ctx.stroke();
-
-  // Animated wing
-  ctx.save();
-  ctx.translate(-6, 2);
-  ctx.rotate(wingFlap);
-
   ctx.beginPath();
-  ctx.moveTo(-19, 0);
-  ctx.quadraticCurveTo(-10, -23, 13, -12);
-  ctx.quadraticCurveTo(21, -3, 9, 6);
-  ctx.quadraticCurveTo(-6, 12, -19, 0);
-  ctx.fillStyle = wingColor;
+  ctx.ellipse(15, -13, 7, 15, -0.15, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-
-  ctx.strokeStyle = "#b18a31";
-  ctx.lineWidth = 1.4;
-
-  for (let i = 0; i < 3; i++) {
-    ctx.beginPath();
-    ctx.moveTo(-10 + i * 7, -1);
-    ctx.quadraticCurveTo(-2 + i * 5, -8, 8 + i * 2, -5);
-    ctx.stroke();
-  }
-
-  ctx.restore();
 
   // Head
   ctx.beginPath();
-  ctx.arc(19, -21, 11, 0, Math.PI * 2);
-  ctx.fillStyle = bodyColor;
+  ctx.arc(17, -27, 12, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = outline;
-  ctx.lineWidth = 2.2;
   ctx.stroke();
 
   // Beak
+  ctx.fillStyle = "#eaa33d";
   ctx.beginPath();
-  ctx.moveTo(27, -20);
-  ctx.lineTo(40, -16);
-  ctx.lineTo(27, -12);
+  ctx.moveTo(26, -29);
+  ctx.lineTo(40, -25);
+  ctx.lineTo(26, -22);
   ctx.closePath();
-  ctx.fillStyle = "#f47b24";
   ctx.fill();
   ctx.stroke();
 
   // Eye
-  ctx.beginPath();
-  ctx.arc(22, -23, 4.3, 0, Math.PI * 2);
   ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(20, -29, 4.2, 0, Math.PI * 2);
   ctx.fill();
 
+  ctx.fillStyle = "#182538";
   ctx.beginPath();
-  ctx.arc(24, -23, 2.1, 0, Math.PI * 2);
-  ctx.fillStyle = "#202027";
+  ctx.arc(22, -29, 2, 0, Math.PI * 2);
   ctx.fill();
+
+  // Tail
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.moveTo(-23, -1);
+  ctx.lineTo(-34, -11);
+  ctx.lineTo(-30, 1);
+  ctx.lineTo(-36, 7);
+  ctx.lineTo(-21, 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
 
   // Feet
-  ctx.strokeStyle = "#e87524";
+  ctx.strokeStyle = "#e98032";
   ctx.lineWidth = 2.5;
 
-  for (let i = 0; i < 2; i++) {
-    const fx = i * 11 - 5;
+  ctx.beginPath();
+  ctx.moveTo(4, 19);
+  ctx.lineTo(4, 25);
+  ctx.lineTo(-1, 27);
+  ctx.moveTo(14, 19);
+  ctx.lineTo(14, 25);
+  ctx.lineTo(9, 27);
+  ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(fx, 17);
-    ctx.lineTo(fx + 1, 23);
-    ctx.lineTo(fx + 8, 25);
-    ctx.stroke();
+  // Golden sparkle
+  if (duck.golden) {
+    ctx.fillStyle = "#fff5a1";
+    ctx.font = "bold 15px Arial";
+    ctx.fillText("✦", -22, -22);
   }
 
   ctx.restore();
-
-  if (duck.isGolden) {
-    ctx.fillStyle = "#fff16b";
-    ctx.font = "bold 17px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("✦", duck.x, duck.y - 36);
-  }
 }
 
-// ---------- PARTICLES ----------
+// ==========================================
+// DRAW PARTICLES
+// ==========================================
 
-function createHitEffect(x, y, golden) {
-  const color = golden ? "#ffdf45" : "#ffffff";
-
-  for (let i = 0; i < 15; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 50 + Math.random() * 170;
-
+function addParticles(x, y, color) {
+  for (let i = 0; i < 9; i++) {
     particles.push({
       x,
       y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life: 0.35 + Math.random() * 0.4,
-      maxLife: 0.75,
-      size: 2 + Math.random() * 5,
+      vx: (Math.random() - 0.5) * 180,
+      vy: (Math.random() - 0.5) * 180,
+      life: 0.45 + Math.random() * 0.35,
       color
     });
   }
 }
 
-function addFloatingText(x, y, text, color = "#fff", big = false) {
-  floatingTexts.push({
-    x, y, text, color,
-    life: 0.9,
-    maxLife: 0.9,
-    big
-  });
-}
-
-function updateEffects(dt) {
+function drawParticles(dt) {
   for (const p of particles) {
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    p.vy += 150 * dt;
     p.life -= dt;
-  }
 
-  particles = particles.filter(p => p.life > 0);
-
-  for (const t of floatingTexts) {
-    t.y -= 35 * dt;
-    t.life -= dt;
-  }
-
-  floatingTexts = floatingTexts.filter(t => t.life > 0);
-}
-
-function drawEffects() {
-  for (const p of particles) {
-    ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+    ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2));
     ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
     ctx.fill();
   }
 
   ctx.globalAlpha = 1;
-  ctx.textAlign = "center";
-
-  for (const t of floatingTexts) {
-    ctx.globalAlpha = Math.max(0, t.life / t.maxLife);
-    ctx.fillStyle = t.color;
-    ctx.font = `900 ${t.big ? 34 : 19}px Arial`;
-    ctx.shadowColor = "#10243a";
-    ctx.shadowBlur = 5;
-    ctx.fillText(t.text, t.x, t.y);
-    ctx.shadowBlur = 0;
-  }
-
-  ctx.globalAlpha = 1;
+  particles = particles.filter((p) => p.life > 0);
 }
 
-// ---------- SHOOTING ----------
+// ==========================================
+// DRAW GAME
+// ==========================================
 
-function getCanvasPoint(event) {
-  const rect = canvas.getBoundingClientRect();
+function drawScene(dt = 0) {
+  if (!ctx) return;
 
-  return {
-    x: event.clientX - rect.left,
-    y: event.clientY - rect.top
-  };
-}
+  ctx.clearRect(0, 0, width, height);
 
-function shoot(event) {
-  if (!running || paused || reloading) return;
+  drawBackground();
 
-  const point = getCanvasPoint(event);
-  pointer = point;
-
-  if (ammo <= 0) {
-    playSound(130, 0.08, "square", 0.02);
-    addFloatingText(point.x, point.y - 10, "RELOAD!", "#ff6565");
-    return;
+  for (const duck of ducks) {
+    if (duck.alive) drawDuck(duck);
   }
 
-  ammo--;
-  shotFlash = 0.09;
-  shake = 2.5;
-  playSound(105, 0.06, "square", 0.05);
+  drawParticles(dt);
 
-  for (let i = ducks.length - 1; i >= 0; i--) {
-    const duck = ducks[i];
-    if (!duck.alive) continue;
+  // Crosshair follows pointer
+  if (pointer.active) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 2;
 
-    const dx = point.x - duck.x;
-    const dy = point.y - duck.y;
-    const hitRadius = 31 * duck.scale;
+    ctx.beginPath();
+    ctx.arc(pointer.x, pointer.y, 11, 0, Math.PI * 2);
+    ctx.moveTo(pointer.x - 17, pointer.y);
+    ctx.lineTo(pointer.x - 5, pointer.y);
+    ctx.moveTo(pointer.x + 5, pointer.y);
+    ctx.lineTo(pointer.x + 17, pointer.y);
+    ctx.moveTo(pointer.x, pointer.y - 17);
+    ctx.lineTo(pointer.x, pointer.y - 5);
+    ctx.moveTo(pointer.x, pointer.y + 5);
+    ctx.lineTo(pointer.x, pointer.y + 17);
+    ctx.stroke();
 
-    if (dx * dx + dy * dy <= hitRadius * hitRadius) {
-      duck.alive = false;
-
-      const points = duck.isGolden ? 30 : 10;
-      score += points;
-
-      createHitEffect(duck.x, duck.y, duck.isGolden);
-      addFloatingText(
-        duck.x,
-        duck.y - 28,
-        duck.isGolden ? "+30 GOLD!" : `+${points}`,
-        duck.isGolden ? "#fff16b" : "#fff"
-      );
-
-      playSound(
-        duck.isGolden ? 1000 : 750,
-        0.13,
-        "triangle",
-        0.05
-      );
-
-      if (score > best) {
-        best = score;
-        localStorage.setItem("duckBlasterBest", String(best));
-      }
-
-      updateLevel();
-      break;
-    }
-  }
-
-  updateHUD();
-}
-
-canvas.addEventListener("pointerdown", shoot);
-
-canvas.addEventListener("pointermove", event => {
-  pointer = getCanvasPoint(event);
-});
-
-// ---------- RELOAD: BUTTON AND R KEY ----------
-
-function reload() {
-  if (!running || paused || reloading || ammo === MAX_AMMO) {
-    return;
-  }
-
-  reloading = true;
-  reloadBtn.textContent = "↻ Loading...";
-  ammoEl.textContent = "RELOADING...";
-
-  playSound(350, 0.1, "triangle", 0.025);
-
-  if (reloadTimeout !== null) {
-    clearTimeout(reloadTimeout);
-  }
-
-  reloadTimeout = setTimeout(() => {
-    ammo = MAX_AMMO;
-    reloading = false;
-    reloadTimeout = null;
-
-    reloadBtn.textContent = "↻ Reload (R)";
-    updateHUD();
-
-    playSound(550, 0.1, "triangle", 0.03);
-  }, 800);
-}
-
-reloadBtn.addEventListener("click", reload);
-
-document.addEventListener("keydown", event => {
-  if (event.key.toLowerCase() === "r" && !event.repeat) {
-    event.preventDefault();
-    reload();
-  }
-
-  if (
-    event.code === "Space" &&
-    running &&
-    !event.repeat
-  ) {
-    event.preventDefault();
-    togglePause();
-  }
-});
-
-// ---------- PAUSE ----------
-
-function togglePause() {
-  if (!running) return;
-
-  paused = !paused;
-  pauseBtn.textContent = paused ? "▶ Resume" : "⏸ Pause";
-
-  if (paused) {
-    if (animationId !== null) {
-      cancelAnimationFrame(animationId);
-      animationId = null;
-    }
-    drawScene(0);
-  } else {
-    lastFrame = performance.now();
-    animationId = requestAnimationFrame(gameLoop);
+    ctx.restore();
   }
 }
 
-pauseBtn.addEventListener("click", togglePause);
+const pointer = {
+  x: 0,
+  y: 0,
+  active: false
+};
 
-// ---------- HUD ----------
+// ==========================================
+// HUD
+// ==========================================
 
 function updateHUD() {
-  scoreEl.textContent = score;
-  bestEl.textContent = best;
-  levelEl.textContent = `${level} / ${MAX_LEVEL}`;
-  timeEl.textContent = Math.ceil(timeLeft);
+  if (ui.score) ui.score.textContent = score;
+  if (ui.best) ui.best.textContent = best;
+  if (ui.level) ui.level.textContent = level;
+  if (ui.time) ui.time.textContent = Math.max(0, Math.ceil(timeLeft));
+  if (ui.lives) {
+    ui.lives.textContent = lives > 0 ? "❤️".repeat(lives) : "💔";
+  }
 
-  livesEl.textContent =
-    "❤️".repeat(lives) + "🖤".repeat(MAX_LIVES - lives);
+  if (ui.ammo) {
+    ui.ammo.textContent = reloading ? "Reloading..." : `${ammo} / ${MAGAZINE_SIZE}`;
+  }
 
-  ammoEl.textContent = reloading
-    ? "RELOADING..."
-    : `AMMO: ${ammo} / ${MAX_AMMO}`;
+  if (ui.levelName) {
+    ui.levelName.textContent =
+      `LEVEL ${level} — ${levelNames[level - 1]}`;
+  }
+
+  if (ui.levelProgress) {
+    const progress = Math.min(100, (score % LEVEL_SCORE) / LEVEL_SCORE * 100);
+    ui.levelProgress.style.width = `${progress}%`;
+  }
+
+  if (ui.pauseBtn) {
+    ui.pauseBtn.textContent = paused ? "Resume" : "Pause";
+  }
+
+  if (score > best) {
+    best = score;
+    saveBest();
+    if (ui.best) ui.best.textContent = best;
+  }
 }
 
-// ---------- START / END ----------
+// ==========================================
+// OVERLAY
+// ==========================================
+
+function showOverlay(title, message, buttonText = "PLAY AGAIN") {
+  if (!ui.overlay) return;
+
+  if (ui.overlayTitle) ui.overlayTitle.textContent = title;
+  if (ui.overlayText) ui.overlayText.textContent = message;
+  if (ui.startBtn) ui.startBtn.textContent = buttonText;
+
+  ui.overlay.classList.remove("hidden");
+}
+
+function hideOverlay() {
+  if (ui.overlay) ui.overlay.classList.add("hidden");
+}
+
+// ==========================================
+// START / RESTART
+// ==========================================
 
 function startGame() {
   if (animationId !== null) {
@@ -670,220 +535,401 @@ function startGame() {
     animationId = null;
   }
 
-  if (reloadTimeout !== null) {
-    clearTimeout(reloadTimeout);
-    reloadTimeout = null;
-  }
-
   score = 0;
   level = 1;
-  lives = MAX_LIVES;
-  ammo = MAX_AMMO;
-  timeLeft = GAME_DURATION;
+  lives = STARTING_LIVES;
+  ammo = MAGAZINE_SIZE;
+  timeLeft = GAME_TIME;
+
+  running = true;
+  paused = false;
+  gameOver = false;
+  reloading = false;
 
   ducks = [];
   particles = [];
-  floatingTexts = [];
 
   spawnTimer = 0;
-  running = true;
-  paused = false;
-  reloading = false;
-  shake = 0;
-  shotFlash = 0;
+  reloadTimer = 0;
+  elapsed = 0;
+  lastFrame = 0;
 
-  pauseBtn.textContent = "⏸ Pause";
-  reloadBtn.textContent = "↻ Reload (R)";
-
-  overlay.classList.add("hidden");
-
-  updateLevel();
+  resizeCanvas();
+  hideOverlay();
   updateHUD();
 
-  lastFrame = performance.now();
+  createDuck();
   animationId = requestAnimationFrame(gameLoop);
 }
 
+// ==========================================
+// END GAME
+// ==========================================
+
 function endGame(won = false) {
+  if (gameOver) return;
+
+  gameOver = true;
   running = false;
   paused = false;
+  reloading = false;
 
   if (animationId !== null) {
     cancelAnimationFrame(animationId);
     animationId = null;
   }
 
-  if (reloadTimeout !== null) {
-    clearTimeout(reloadTimeout);
-    reloadTimeout = null;
-  }
-
-  reloading = false;
-  reloadBtn.textContent = "↻ Reload (R)";
-  pauseBtn.textContent = "⏸ Pause";
+  updateHUD();
+  drawScene();
 
   if (won) {
-    overlayTitle.textContent = "🏆 YOU WIN!";
-    overlayText.textContent =
-      `Amazing! You completed all 10 levels with ${score} points.`;
-  } else if (lives <= 0) {
-    overlayTitle.textContent = "GAME OVER";
-    overlayText.textContent =
-      `Final score: ${score}. Try again and beat your best!`;
+    showOverlay(
+      "YOU WIN!",
+      `Amazing! You completed all 10 levels with ${score} points.`,
+      "PLAY AGAIN"
+    );
   } else {
-    overlayTitle.textContent = "TIME'S UP!";
-    overlayText.textContent =
-      `You scored ${score} points and reached level ${level}.`;
+    showOverlay(
+      "GAME OVER",
+      `Final score: ${score}. Best score: ${best}. Try again!`,
+      "PLAY AGAIN"
+    );
   }
-
-  startBtn.textContent = "PLAY AGAIN";
-  overlay.classList.remove("hidden");
-
-  updateHUD();
-  drawScene(0);
 }
 
-startBtn.addEventListener("click", startGame);
+// ==========================================
+// LOSE A LIFE
+// ==========================================
 
-// ---------- GAME UPDATE ----------
+function loseLife(reason) {
+  if (gameOver || !running) return;
 
-function updateGame(dt) {
-  timeLeft -= dt;
+  lives = Math.max(0, lives - 1);
 
-  if (timeLeft <= 0) {
-    timeLeft = 0;
-    updateHUD();
-    endGame(level === MAX_LEVEL);
+  if (reason === "miss") {
+    playSound(150, 0.12, "square");
+  } else {
+    playSound(220, 0.16, "triangle");
+  }
+
+  updateHUD();
+
+  if (lives <= 0) {
+    endGame(false);
+  }
+}
+
+// ==========================================
+// SHOOTING
+// ==========================================
+
+function shoot(event) {
+  if (!running || paused || gameOver || reloading || ammo <= 0) {
+    if (ammo <= 0 && running && !paused && !reloading) {
+      playSound(180, 0.05, "square");
+    }
     return;
   }
 
-  spawnTimer += dt * 1000;
+  // Ignore clicks on the in-game control buttons.
+  if (event.target.closest && event.target.closest("button")) return;
 
-  const activeDucks = ducks.filter(duck => duck.alive).length;
+  const rect = canvas.getBoundingClientRect();
 
-  if (
-    spawnTimer >= getSpawnInterval() &&
-    activeDucks < getDuckLimit()
-  ) {
-    spawnDuck();
-    spawnTimer = 0;
-  }
+  const x = (event.clientX - rect.left) * (width / rect.width);
+  const y = (event.clientY - rect.top) * (height / rect.height);
 
-  for (const duck of ducks) {
+  ammo--;
+
+  let hitDuck = null;
+
+  // Check ducks from last drawn to first drawn.
+  for (let i = ducks.length - 1; i >= 0; i--) {
+    const duck = ducks[i];
+
     if (!duck.alive) continue;
 
-    duck.x += duck.direction * duck.speed * dt;
-    duck.phase += dt * (1.7 + level * 0.12);
-    duck.flap += dt * (8 + level * 0.7);
+    const dx = x - duck.x;
+    const dy = y - duck.y;
 
-    duck.y += Math.sin(duck.phase) * duck.verticalSpeed * dt;
-    duck.y = Math.max(50, Math.min(height * 0.76, duck.y));
+    // Larger, more forgiving hit area.
+    const hitRadius = 32 * duck.scale;
 
-    if (
-      (duck.direction === 1 && duck.x > width + 55) ||
-      (duck.direction === -1 && duck.x < -55)
-    ) {
-      duck.alive = false;
-      lives--;
-
-      addFloatingText(
-        Math.min(width - 50, Math.max(50, duck.x)),
-        duck.y,
-        "MISSED!",
-        "#ff5656"
-      );
-
-      playSound(170, 0.15, "sawtooth", 0.025);
-
-      if (lives <= 0) {
-        lives = 0;
-        updateHUD();
-        endGame(false);
-        return;
-      }
+    if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+      hitDuck = duck;
+      break;
     }
   }
 
-  ducks = ducks.filter(duck => duck.alive);
+  if (hitDuck) {
+    hitDuck.alive = false;
 
-  updateEffects(dt);
+    const points = hitDuck.golden ? 30 : 10;
+    score += points;
 
-  if (shotFlash > 0) shotFlash = Math.max(0, shotFlash - dt);
-  if (shake > 0) shake = Math.max(0, shake - dt * 12);
+    addParticles(
+      hitDuck.x,
+      hitDuck.y,
+      hitDuck.golden ? "#ffd84e" : "#fff4c4"
+    );
+
+    playSound(hitDuck.golden ? 880 : 620, 0.09);
+
+    // Progress through the 10 levels.
+    const newLevel = Math.min(
+      MAX_LEVEL,
+      Math.floor(score / LEVEL_SCORE) + 1
+    );
+
+    if (newLevel > level) {
+      level = newLevel;
+      playSound(1000, 0.18);
+    }
+
+    updateHUD();
+  } else {
+    // NEW FIX: Every missed shot costs exactly one life.
+    loseLife("miss");
+  }
+
+  updateHUD();
+
+  if (!gameOver && ammo === 0) {
+    // Let the player reload when the magazine is empty.
+  }
+}
+
+// ==========================================
+// RELOAD
+// ==========================================
+
+function reload() {
+  if (!running || paused || gameOver || reloading) return;
+  if (ammo === MAGAZINE_SIZE) return;
+
+  reloading = true;
+  reloadTimer = 1.1;
+
+  playSound(300, 0.08, "triangle");
+  updateHUD();
+}
+
+function finishReload() {
+  ammo = MAGAZINE_SIZE;
+  reloading = false;
+  reloadTimer = 0;
+
+  playSound(520, 0.08);
+  updateHUD();
+}
+
+// ==========================================
+// PAUSE / RESUME
+// ==========================================
+
+function togglePause() {
+  if (!running || gameOver) return;
+
+  paused = !paused;
+
+  if (paused) {
+    if (ui.overlayTitle) ui.overlayTitle.textContent = "PAUSED";
+    if (ui.overlayText) {
+      ui.overlayText.textContent = "Take a break. Resume when you're ready.";
+    }
+    if (ui.startBtn) ui.startBtn.textContent = "RESUME";
+    if (ui.overlay) ui.overlay.classList.remove("hidden");
+  } else {
+    hideOverlay();
+    lastFrame = 0;
+  }
 
   updateHUD();
 }
 
-// ---------- RENDER ----------
-
-function drawScene(dt) {
-  ctx.save();
-
-  if (shake > 0) {
-    ctx.translate(
-      (Math.random() - 0.5) * shake,
-      (Math.random() - 0.5) * shake
-    );
-  }
-
-  drawBackground(dt);
-
-  for (const duck of ducks) {
-    if (duck.alive) drawDuck(duck);
-  }
-
-  drawEffects();
-
-  if (running && !paused) {
-    ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.lineWidth = 1.5;
-
-    ctx.beginPath();
-    ctx.arc(pointer.x, pointer.y, 10, 0, Math.PI * 2);
-
-    ctx.moveTo(pointer.x - 16, pointer.y);
-    ctx.lineTo(pointer.x - 5, pointer.y);
-
-    ctx.moveTo(pointer.x + 5, pointer.y);
-    ctx.lineTo(pointer.x + 16, pointer.y);
-
-    ctx.moveTo(pointer.x, pointer.y - 16);
-    ctx.lineTo(pointer.x, pointer.y - 5);
-
-    ctx.moveTo(pointer.x, pointer.y + 5);
-    ctx.lineTo(pointer.x, pointer.y + 16);
-
-    ctx.stroke();
-  }
-
-  if (shotFlash > 0) {
-    ctx.fillStyle =
-      `rgba(255,245,170,${Math.min(0.45, shotFlash * 5)})`;
-    ctx.fillRect(0, 0, width, height);
-  }
-
-  ctx.restore();
-}
+// ==========================================
+// MAIN GAME LOOP
+// ==========================================
 
 function gameLoop(timestamp) {
-  if (!running || paused) return;
+  animationId = null;
 
-  const dt = Math.min((timestamp - lastFrame) / 1000, 0.04);
+  if (!running || gameOver) return;
+
+  if (paused) {
+    animationId = requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  const dt = lastFrame
+    ? Math.min((timestamp - lastFrame) / 1000, 0.05)
+    : 0;
+
   lastFrame = timestamp;
+  elapsed += dt;
+  timeLeft = Math.max(0, GAME_TIME - elapsed);
 
-  updateGame(dt);
+  if (reloading) {
+    reloadTimer -= dt;
 
-  if (!running) return;
+    if (reloadTimer <= 0) {
+      finishReload();
+    }
+  }
+
+  // Spawn ducks faster as levels increase.
+  spawnTimer -= dt;
+
+  const spawnInterval = Math.max(0.45, 1.35 - level * 0.075);
+  const maxDucks = Math.min(3 + Math.floor(level / 2), 8);
+
+  if (spawnTimer <= 0 && ducks.filter((d) => d.alive).length < maxDucks) {
+    createDuck();
+    spawnTimer = spawnInterval;
+  }
+
+  // Move ducks.
+  for (const duck of ducks) {
+    if (!duck.alive) continue;
+
+    duck.x += duck.vx * dt;
+    duck.y += duck.vy * dt;
+    duck.wing += dt * 12;
+    duck.wobble += dt * 2;
+
+    // Gentle vertical movement.
+    duck.y += Math.sin(duck.wobble) * 12 * dt;
+
+    // Bounce gently off top/bottom boundaries.
+    if (duck.y < 35) {
+      duck.y = 35;
+      duck.vy = Math.abs(duck.vy);
+    }
+
+    if (duck.y > height * 0.78) {
+      duck.y = height * 0.78;
+      duck.vy = -Math.abs(duck.vy);
+    }
+
+    // Escaping ducks also cost one life.
+    const escaped =
+      (duck.vx > 0 && duck.x > width + 50) ||
+      (duck.vx < 0 && duck.x < -50);
+
+    if (escaped && !duck.escaped) {
+      duck.escaped = true;
+      duck.alive = false;
+      loseLife("escape");
+
+      if (gameOver) return;
+    }
+  }
+
+  ducks = ducks.filter((duck) => duck.alive);
 
   drawScene(dt);
+  updateHUD();
+
+  // Win when all 10 levels are completed.
+  if (level >= MAX_LEVEL && score >= MAX_LEVEL * LEVEL_SCORE) {
+    endGame(true);
+    return;
+  }
+
+  // End when the timer runs out.
+  if (timeLeft <= 0) {
+    endGame(false);
+    return;
+  }
+
   animationId = requestAnimationFrame(gameLoop);
 }
 
-// ---------- INITIALIZE ----------
+// ==========================================
+// POINTER / MOUSE / TOUCH
+// ==========================================
 
-bestEl.textContent = best;
+canvas.addEventListener("pointermove", (event) => {
+  const rect = canvas.getBoundingClientRect();
+
+  pointer.x = (event.clientX - rect.left) * (width / rect.width);
+  pointer.y = (event.clientY - rect.top) * (height / rect.height);
+  pointer.active = true;
+});
+
+canvas.addEventListener("pointerleave", () => {
+  pointer.active = false;
+});
+
+canvas.addEventListener("pointerdown", (event) => {
+  if (event.button !== undefined && event.button !== 0) return;
+
+  event.preventDefault();
+  shoot(event);
+});
+
+// ==========================================
+// BUTTONS
+// ==========================================
+
+if (ui.startBtn) {
+  ui.startBtn.addEventListener("click", () => {
+    if (running && paused) {
+      togglePause();
+    } else {
+      startGame();
+    }
+  });
+}
+
+if (ui.reloadBtn) {
+  ui.reloadBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    reload();
+  });
+}
+
+if (ui.pauseBtn) {
+  ui.pauseBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    togglePause();
+  });
+}
+
+if (ui.soundBtn) {
+  ui.soundBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+
+    soundEnabled = !soundEnabled;
+    ui.soundBtn.textContent = soundEnabled ? "Sound: ON" : "Sound: OFF";
+
+    if (soundEnabled) playSound(600, 0.08);
+  });
+}
+
+// Keyboard shortcuts.
+window.addEventListener("keydown", (event) => {
+  if (event.repeat) return;
+
+  if (event.key.toLowerCase() === "r") {
+    reload();
+  }
+
+  if (event.key === "Escape" || event.key.toLowerCase() === "p") {
+    togglePause();
+  }
+});
+
+// ==========================================
+// INITIALIZE
+// ==========================================
 
 resizeCanvas();
-updateLevel();
 updateHUD();
-drawScene(0);
+drawScene();
+
+showOverlay(
+  "DUCK BLASTER",
+  "Shoot the ducks, collect bonus points, and survive all 10 levels!",
+  "START GAME"
+);
