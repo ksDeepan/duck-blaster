@@ -1,4 +1,3 @@
-
 "use strict";
 
 // ==========================================
@@ -478,12 +477,15 @@ function updateHUD() {
   if (ui.best) ui.best.textContent = best;
   if (ui.level) ui.level.textContent = level;
   if (ui.time) ui.time.textContent = Math.max(0, Math.ceil(timeLeft));
+
   if (ui.lives) {
     ui.lives.textContent = lives > 0 ? "❤️".repeat(lives) : "💔";
   }
 
   if (ui.ammo) {
-    ui.ammo.textContent = reloading ? "Reloading..." : `${ammo} / ${MAGAZINE_SIZE}`;
+    ui.ammo.textContent = reloading
+      ? "Reloading..."
+      : `${ammo} / ${MAGAZINE_SIZE}`;
   }
 
   if (ui.levelName) {
@@ -492,7 +494,11 @@ function updateHUD() {
   }
 
   if (ui.levelProgress) {
-    const progress = Math.min(100, (score % LEVEL_SCORE) / LEVEL_SCORE * 100);
+    const progress = Math.min(
+      100,
+      (score % LEVEL_SCORE) / LEVEL_SCORE * 100
+    );
+
     ui.levelProgress.style.width = `${progress}%`;
   }
 
@@ -503,6 +509,7 @@ function updateHUD() {
   if (score > best) {
     best = score;
     saveBest();
+
     if (ui.best) ui.best.textContent = best;
   }
 }
@@ -628,6 +635,7 @@ function shoot(event) {
     if (ammo <= 0 && running && !paused && !reloading) {
       playSound(180, 0.05, "square");
     }
+
     return;
   }
 
@@ -688,15 +696,11 @@ function shoot(event) {
 
     updateHUD();
   } else {
-    // NEW FIX: Every missed shot costs exactly one life.
+    // Every missed shot costs exactly one life.
     loseLife("miss");
   }
 
   updateHUD();
-
-  if (!gameOver && ammo === 0) {
-    // Let the player reload when the magazine is empty.
-  }
 }
 
 // ==========================================
@@ -734,9 +738,11 @@ function togglePause() {
 
   if (paused) {
     if (ui.overlayTitle) ui.overlayTitle.textContent = "PAUSED";
+
     if (ui.overlayText) {
       ui.overlayText.textContent = "Take a break. Resume when you're ready.";
     }
+
     if (ui.startBtn) ui.startBtn.textContent = "RESUME";
     if (ui.overlay) ui.overlay.classList.remove("hidden");
   } else {
@@ -811,7 +817,7 @@ function gameLoop(timestamp) {
       duck.vy = -Math.abs(duck.vy);
     }
 
-    // Escaping ducks also cost one life.
+    // Ducks can fly past without costing a life.
     const escaped =
       (duck.vx > 0 && duck.x > width + 50) ||
       (duck.vx < 0 && duck.x < -50);
@@ -819,9 +825,6 @@ function gameLoop(timestamp) {
     if (escaped && !duck.escaped) {
       duck.escaped = true;
       duck.alive = false;
-      loseLife("escape");
-
-      if (gameOver) return;
     }
   }
 
