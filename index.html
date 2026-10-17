@@ -1,0 +1,69 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080d18">
+  <title>Duck Blaster - Arcade Game</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">ARCADE CHALLENGE</p>
+        <h1>🦆 DUCK <span>BLASTER</span></h1>
+      </div>
+      <button id="soundBtn" class="small-btn">🔊 Sound</button>
+    </header>
+
+    <section class="hud">
+      <div class="stat"><span>SCORE</span><strong id="score">0</strong></div>
+      <div class="stat"><span>BEST</span><strong id="best">0</strong></div>
+      <div class="stat"><span>LEVEL</span><strong id="level">1 / 10</strong></div>
+      <div class="stat"><span>TIME</span><strong id="time">60</strong></div>
+      <div class="stat"><span>LIVES</span><strong id="lives">❤️❤️❤️❤️❤️</strong></div>
+    </section>
+
+    <div class="progress-track">
+      <div id="levelProgress" class="progress-fill"></div>
+    </div>
+
+    <section class="arena">
+      <div class="arena-label">
+        <span id="levelName">LEVEL 1 — FIRST FLIGHT</span>
+        <span id="ammo">AMMO: 6 / 6</span>
+      </div>
+
+      <canvas id="gameCanvas" aria-label="Duck shooting play area"></canvas>
+
+      <div class="side-controls">
+        <button id="pauseBtn" class="control-btn">⏸ Pause</button>
+        <button id="reloadBtn" class="control-btn">↻ Reload (R)</button>
+      </div>
+
+      <div id="overlay" class="overlay">
+        <div class="modal">
+          <div class="duck-icon">🦆</div>
+          <p class="eyebrow">WELCOME TO THE RANGE</p>
+          <h2 id="overlayTitle">DUCK BLASTER</h2>
+          <p id="overlayText">
+            Shoot flying ducks, collect bonus points, and reach Level 10!
+          </p>
+          <button id="startBtn" class="primary-btn">START GAME</button>
+          <p class="hint">Click or tap a duck to shoot. Press R to reload.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>🎯 HIT THE DUCKS</span>
+      <span>✨ GOLDEN DUCK = 30 POINTS</span>
+      <span>🏆 REACH LEVEL 10</span>
+    </footer>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
