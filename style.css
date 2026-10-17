@@ -13,10 +13,15 @@
   --muted: #9cabc4;
 }
 
+html {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
-  padding: 22px;
+  min-height: 100dvh;
+  padding: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -31,11 +36,11 @@ button {
 }
 
 .game-shell {
-  width: min(1100px, 100%);
-  padding: 22px;
+  width: min(1500px, 100%);
+  padding: 16px;
   background: rgba(12, 19, 33, 0.96);
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 18px;
   box-shadow: 0 24px 80px #0008;
 }
 
@@ -43,12 +48,12 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 15px;
-  margin-bottom: 22px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .eyebrow {
-  margin: 0 0 7px;
+  margin: 0 0 5px;
   color: var(--cyan);
   font-size: 10px;
   font-weight: 900;
@@ -57,7 +62,7 @@ button {
 
 h1 {
   margin: 0;
-  font-size: clamp(22px, 4vw, 34px);
+  font-size: clamp(22px, 3vw, 32px);
   font-weight: 950;
   letter-spacing: 1px;
 }
@@ -72,7 +77,7 @@ h1 span {
   background: #19263b;
   border: 1px solid #354761;
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 9px 12px;
   font-weight: 750;
 }
 
@@ -84,31 +89,31 @@ h1 span {
 .hud {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .stat {
   min-width: 0;
-  padding: 13px 12px;
+  padding: 9px 11px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .stat span {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   color: var(--muted);
   font-size: 10px;
   font-weight: 850;
-  letter-spacing: 1.2px;
+  letter-spacing: 1px;
 }
 
 .stat strong {
   display: block;
   overflow: hidden;
-  font-size: clamp(15px, 2.3vw, 23px);
+  font-size: clamp(15px, 2vw, 22px);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -119,8 +124,8 @@ h1 span {
 }
 
 .progress-track {
-  height: 7px;
-  margin: 0 0 15px;
+  height: 6px;
+  margin: 0 0 10px;
   overflow: hidden;
   background: #202b40;
   border-radius: 20px;
@@ -139,15 +144,15 @@ h1 span {
   overflow: hidden;
   background: #80d8f1;
   border: 1px solid #35506b;
-  border-radius: 15px;
+  border-radius: 12px;
 }
 
 .arena-label {
   position: absolute;
   z-index: 2;
-  top: 12px;
-  right: 14px;
-  left: 14px;
+  top: 10px;
+  right: 12px;
+  left: 12px;
   display: flex;
   justify-content: space-between;
   gap: 10px;
@@ -162,7 +167,8 @@ h1 span {
 #gameCanvas {
   display: block;
   width: 100%;
-  height: clamp(330px, 52vw, 530px);
+  height: clamp(240px, 48vh, 530px);
+  height: clamp(240px, 48dvh, 530px);
   cursor: crosshair;
   touch-action: manipulation;
 }
@@ -170,11 +176,12 @@ h1 span {
 .side-controls {
   position: absolute;
   z-index: 3;
-  right: 12px;
-  bottom: 12px;
-  left: 12px;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
   display: flex;
   justify-content: space-between;
+  gap: 8px;
   pointer-events: none;
 }
 
@@ -192,7 +199,7 @@ h1 span {
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: 12px;
   background: #07101bc9;
   backdrop-filter: blur(5px);
 }
@@ -203,35 +210,37 @@ h1 span {
 
 .modal {
   width: min(390px, 100%);
-  padding: 28px 24px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 20px;
   text-align: center;
   background: #111c30;
   border: 1px solid #3b526f;
-  border-radius: 20px;
+  border-radius: 16px;
   box-shadow: 0 20px 60px #0006;
 }
 
 .duck-icon {
-  margin-bottom: 12px;
-  font-size: 50px;
+  margin-bottom: 8px;
+  font-size: 42px;
 }
 
 .modal h2 {
-  margin: 0 0 12px;
-  font-size: clamp(24px, 5vw, 34px);
+  margin: 0 0 10px;
+  font-size: clamp(22px, 4vw, 32px);
   letter-spacing: 1px;
 }
 
 .modal > p:not(.eyebrow):not(.hint) {
   color: #c4d0e2;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .primary-btn {
   width: 100%;
   margin-top: 10px;
-  padding: 15px 20px;
+  padding: 13px 16px;
   color: #08121c;
   background: linear-gradient(135deg, var(--cyan), #9bffe9);
   border: 0;
@@ -246,7 +255,7 @@ h1 span {
 }
 
 .hint {
-  margin: 15px 0 0;
+  margin: 12px 0 0;
   color: #95a8c4;
   font-size: 11px;
 }
@@ -255,47 +264,141 @@ footer {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 8px;
+  margin-top: 10px;
   color: #8fa2bd;
   font-size: 10px;
   font-weight: 850;
   letter-spacing: 1px;
 }
 
-@media (max-width: 650px) {
+@media (max-height: 700px) and (min-width: 651px) {
   body {
-    padding: 8px;
+    padding: 6px;
   }
 
   .game-shell {
-    padding: 12px;
-    border-radius: 16px;
+    padding: 10px;
   }
 
   .topbar {
-    margin-bottom: 14px;
+    margin-bottom: 7px;
+  }
+
+  .eyebrow {
+    margin-bottom: 2px;
+  }
+
+  .hud {
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .stat {
+    padding: 6px 9px;
+  }
+
+  .stat span {
+    margin-bottom: 3px;
+  }
+
+  .progress-track {
+    margin-bottom: 6px;
+  }
+
+  #gameCanvas {
+    height: clamp(200px, 43dvh, 400px);
+  }
+
+  footer {
+    margin-top: 6px;
+  }
+}
+
+@media (max-width: 650px) {
+  body {
+    padding: 6px;
+    align-items: flex-start;
+  }
+
+  .game-shell {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .topbar {
+    margin-bottom: 10px;
+  }
+
+  .eyebrow {
+    font-size: 8px;
+    letter-spacing: 2px;
+  }
+
+  h1 {
+    font-size: clamp(20px, 5vw, 27px);
+  }
+
+  .small-btn {
+    padding: 8px;
+    font-size: 12px;
   }
 
   .hud {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: 6px;
   }
 
   .stat {
-    padding: 10px;
+    padding: 8px;
+  }
+
+  .stat span {
+    font-size: 9px;
   }
 
   #gameCanvas {
-    height: 430px;
+    height: clamp(280px, 55dvh, 430px);
   }
 
   .arena-label {
+    top: 8px;
+    right: 8px;
+    left: 8px;
     font-size: 9px;
+  }
+
+  .control-btn {
+    padding: 8px 10px;
+    font-size: 11px;
   }
 
   footer {
     justify-content: center;
     font-size: 9px;
+  }
+}
+
+@media (max-width: 380px) {
+  .game-shell {
+    padding: 7px;
+  }
+
+  .hud {
+    gap: 4px;
+  }
+
+  .stat {
+    padding: 7px 5px;
+  }
+
+  .stat span {
+    font-size: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  .control-btn {
+    padding: 7px;
+    font-size: 10px;
   }
 }
